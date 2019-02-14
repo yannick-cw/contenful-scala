@@ -32,7 +32,7 @@ object MetaInfo {
           x =>
             new CreatedAt {
               val date: String = x
-          }
+            }
         )
         .toRight("Did not find a creation time")
   }
@@ -45,7 +45,7 @@ object MetaInfo {
           x =>
             new UpdatedAt {
               val date: String = x
-          }
+            }
         )
         .toRight("Did not find a updated time")
   }
@@ -58,7 +58,7 @@ object MetaInfo {
           x =>
             new FirstPublishedAt {
               val date: String = x
-          }
+            }
         )
         .toRight("Did not find a first published time")
   }
@@ -71,7 +71,7 @@ object MetaInfo {
           x =>
             new PublishedAt {
               val date: String = x
-          }
+            }
         )
         .toRight("Did not find a published time")
   }

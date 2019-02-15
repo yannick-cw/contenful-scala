@@ -1,5 +1,7 @@
 package io.yannick_cw.contenful.parser
 
+import java.util
+
 import com.contentful.java.cma.model.CMAEntry
 import io.yannick_cw.contenful.parser.CmaReader.Result
 
@@ -46,6 +48,10 @@ object CmaCursor {
       val focus: Option[String] = cFocus
       val entry: CMAEntry       = cmaEntry
       val scalaFields: Map[String, Map[String, AnyRef]] =
-        cmaEntry.getFields.asScala.toMap.mapValues(_.asScala.toMap)
+        Option(cmaEntry.getFields)
+          .getOrElse(new util.LinkedHashMap())
+          .asScala
+          .toMap
+          .mapValues(_.asScala.toMap)
     }
 }

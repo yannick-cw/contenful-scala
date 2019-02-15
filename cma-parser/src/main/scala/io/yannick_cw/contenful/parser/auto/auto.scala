@@ -51,7 +51,7 @@ package object auto {
       time =>
         Try(ZonedDateTime.parse(time)).toEither.left.map(
           err => ParsingError(s"Failed parsing time from $time with: $err")
-      )
+        )
     )
 
   implicit val coordinatesReader: CmaReader[Coordinates] =
@@ -76,7 +76,7 @@ package object auto {
           new Coordinates {
             val lon: Double = longitude
             val lat: Double = lattitude
-        }
+          }
     )
 
   private def toLinkType(_type: String): Result[CMAType] = _type match {
@@ -129,13 +129,14 @@ package object auto {
           }
           .foldLeft(Right(List.empty): Result[List[A]])(
             (acc, res) => acc.flatMap(l => res.map(l :+ _))
-        )
+          )
     )
 
-  implicit val intListReader: CmaReader[List[Int]]       = listReader[Int]
   implicit val stringListReader: CmaReader[List[String]] = listReader[String]
   implicit val boolListReader: CmaReader[List[Boolean]]  = listReader[Boolean]
   implicit val doubleListReader: CmaReader[List[Double]] = listReader[Double]
+  implicit val intListReader: CmaReader[List[Int]] =
+    doubleListReader.map(_.map(_.toInt))
   implicit val cmaLinkListReader: CmaReader[List[CMALink]] =
     listReader[LinkedTreeMap[String, LinkedTreeMap[String, String]]]
       .emap(
@@ -158,8 +159,8 @@ package object auto {
             err =>
               ReadingError(
                 s"Failed for field name ${witness.value.name}: " + err
-            )
-        )
+              )
+          )
     )
 
   implicit val hnilDecoder: CmaReader[HNil] = _ => Right(HNil)

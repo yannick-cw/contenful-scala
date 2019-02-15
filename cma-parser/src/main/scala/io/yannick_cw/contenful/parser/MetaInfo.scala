@@ -30,6 +30,11 @@ object MetaInfo {
   }
 
   trait Coordinates {
+    override def equals(obj: Any): Boolean = obj match {
+      case obj: Coordinates => obj.lon == this.lon && obj.lat == this.lat
+      case _                => false
+    }
+
     override def toString: String = s"Coordinates { lon: $lon, lat: $lat }"
     val lon: Double
     val lat: Double

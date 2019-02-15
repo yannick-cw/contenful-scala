@@ -1,99 +1,114 @@
 package io.yannick_cw.contenful.parser
 
-import com.contentful.java.cma.model.CMALink
+import com.contentful.java.cma.model.{CMALink, CMAType}
+import com.google.gson.internal.LinkedTreeMap
+import io.yannick_cw.contenful.parser.CmaReader.{
+  ParsingError,
+  ReadingError,
+  Result
+}
 import shapeless.labelled.{FieldType, field}
 import shapeless.{CNil, HList, HNil, LabelledGeneric, Lazy, Witness, :: => #:}
 
 import scala.collection.JavaConverters._
 import scala.reflect.ClassTag
-import scala.util.Try
 
 package object auto {
 
-  private def baseTypeParser[A](
-      cursor: CmaCursor
-  )(implicit classTag: ClassTag[A]): Either[String, A] =
+  private def baseTypeReader[A](implicit classTag: ClassTag[A]): CmaReader[A] =
+    (cursor: CmaCursor) =>
+      for {
+        focus <- cursor.focus.toRight(
+          ReadingError(s"No cursor given to decode ${classTag.toString}")
+        )
+        anyField <- cursor.scalaFields
+          .get(focus)
+          .toRight(ReadingError(s"Did not find field $focus"))
+        forLocale <- anyField
+          .get("de-DE")
+          .toRight(ReadingError(s"Did not find $focus for locale de-DE"))
+        typedValue <- forLocale match {
+          case classTag(a) => Right(a)
+          case _ =>
+            Left(
+              ParsingError(
+                s"Could not parse to ${classTag.toString} for $forLocale"
+              )
+            )
+        }
+      } yield typedValue
+
+  implicit val intReader: CmaReader[Int]       = baseTypeReader
+  implicit val boolReader: CmaReader[Boolean]  = baseTypeReader
+  implicit val doubleReader: CmaReader[Double] = baseTypeReader
+  implicit val stringReader: CmaReader[String] = baseTypeReader
+
+  private def parseCmaLink(
+      link: LinkedTreeMap[String, LinkedTreeMap[String, String]]
+  ) =
     for {
-      focus <- cursor.focus.toRight(
-        s"No cursor given to decode ${classTag.toString}"
-      )
-      anyField <- cursor.scalaFields
-        .get(focus)
-        .toRight(s"Did not find field $focus")
-      forLocale <- anyField
-        .get("de-DE")
-        .toRight(s"Did not find $focus for locale de-DE")
-      typedValue <- forLocale match {
-        case classTag(a) => Right(a)
-        case _ =>
-          Left(s"Could not parse to ${classTag.toString} for $forLocale")
-      }
-    } yield typedValue
+      sys <- link.asScala
+        .get("sys")
+        .toRight(ReadingError(s"Could not parese $link to CMALink"))
+      scalaMap = sys.asScala
+      linkType <- scalaMap
+        .get("linkType")
+        .toRight(ReadingError(s"Did not find link type on CMALink $link"))
+      entry <- if (linkType == "Entry") Right(CMAType.Entry)
+      else
+        Left(
+          ReadingError(
+            s"Only Entry as CMALink linktype is currently supported, but was $linkType"
+          )
+        )
+      id <- scalaMap
+        .get("id")
+        .toRight(ReadingError(s"Did not find id on CMALink $link"))
+    } yield new CMALink(entry).setId(id)
 
-  implicit val intReader: CmaReader[Int] =
-    CmaReader.instance(baseTypeParser[Int](_))
-
-  implicit val boolReader: CmaReader[Boolean] =
-    CmaReader.instance(baseTypeParser[Boolean](_))
-
-  implicit val doubleReader: CmaReader[Double] =
-    CmaReader.instance(baseTypeParser[Double](_))
-
-  implicit val stringReader: CmaReader[String] =
-    CmaReader.instance(baseTypeParser[String](_))
-
-  implicit val cmaLinkReader: CmaReader[CMALink] = (cursor: CmaCursor) =>
-    for {
-      focus <- cursor.focus.toRight(
-        s"No cursor given to decode CmaLink"
-      )
-      anyField <- cursor.scalaFields
-        .get(focus)
-        .toRight(s"Did not find field $focus")
-      forLocale <- anyField
-        .get("de-DE")
-        .toRight(s"Did not find $focus for locale de-DE")
-      typedValue <- Try(forLocale.asInstanceOf[CMALink]).toEither.left.map(_ =>
-        s"Could not parse to CmaLink for $forLocale")
-    } yield typedValue
+  implicit val cmaLinkReader: CmaReader[CMALink] =
+    baseTypeReader[LinkedTreeMap[String, LinkedTreeMap[String, String]]]
+      .emap(parseCmaLink)
 
   implicit def optReader[A](implicit r: CmaReader[A]): CmaReader[Option[A]] =
-    (cma: CmaCursor) => r.read(cma).fold(_ => Right(None), r => Right(Some(r)))
+    (cma: CmaCursor) =>
+      r.read(cma)
+        .fold({
+          case _: ReadingError => Right(None)
+          case p: ParsingError => Left(p)
+        }, r => Right(Some(r)))
 
   implicit val javaListReader: CmaReader[java.util.List[AnyRef]] =
-    (cma: CmaCursor) => baseTypeParser[java.util.List[AnyRef]](cma)
+    baseTypeReader[java.util.List[AnyRef]]
 
   private implicit def listReader[A](
       implicit classTag: ClassTag[A]
   ): CmaReader[List[A]] =
-    (cma: CmaCursor) =>
-      for {
-        jList <- javaListReader.read(cma)
-        aList <- jList.asScala.toList
+    javaListReader.emap(
+      jList =>
+        jList.asScala.toList
           .map {
             case classTag(value) => Right(value)
-            case noMatch         => Left(s"Could not parse to $classTag for $noMatch")
+            case noMatch =>
+              Left(ReadingError(s"Could not parse to $classTag for $noMatch"))
           }
-          .foldLeft(Right(List.empty): Either[String, List[A]])(
-            (acc, res) => acc.flatMap(l => res.map(_ :: l))
+          .foldLeft(Right(List.empty): Result[List[A]])(
+            (acc, res) => acc.flatMap(l => res.map(l :+ _))
           )
-      } yield aList
+    )
 
   implicit val intListReader: CmaReader[List[Int]]       = listReader[Int]
   implicit val stringListReader: CmaReader[List[String]] = listReader[String]
   implicit val boolListReader: CmaReader[List[Boolean]]  = listReader[Boolean]
   implicit val doubleListReader: CmaReader[List[Double]] = listReader[Double]
-  implicit val cmaLinkListReader: CmaReader[List[CMALink]] = (cma: CmaCursor) =>
-    for {
-      jList <- javaListReader.read(cma)
-      aList <- jList.asScala.toList
-        .map(any =>
-          Try(any.asInstanceOf[CMALink]).toEither.left.map(_ =>
-            "Failed parsing to CMALink"))
-        .foldLeft(Right(List.empty): Either[String, List[CMALink]])(
-          (acc, res) => acc.flatMap(l => res.map(_ :: l))
-        )
-    } yield aList
+  implicit val cmaLinkListReader: CmaReader[List[CMALink]] =
+    listReader[LinkedTreeMap[String, LinkedTreeMap[String, String]]]
+      .emap(
+        _.map(parseCmaLink)
+          .foldLeft(Right(List.empty): Result[List[CMALink]])(
+            (acc, res) => acc.flatMap(l => res.map(_ :: l))
+          )
+      )
 
   private def keyTagDecoder[K <: Symbol, V](
       implicit witness: Witness.Aux[K],
@@ -104,13 +119,18 @@ package object auto {
         reader
           .read(CmaCursor(Some(witness.value.name), cursor.entry))
           .left
-          .map(s"Failed for field name ${witness.value.name}: " + _)
+          .map(
+            err =>
+              ReadingError(
+                s"Failed for field name ${witness.value.name}: " + err
+              )
+          )
     )
 
   implicit val hnilDecoder: CmaReader[HNil] = _ => Right(HNil)
 
   implicit val cnilDecoder: CmaReader[CNil] = entry =>
-    Left(s"Could not parse $entry")
+    Left(ReadingError(s"Could not parse $entry"))
 
   implicit def hlistDecoder[K <: Symbol, H, T <: HList](
       implicit

@@ -1,6 +1,7 @@
 package io.yannick_cw.contenful.parser
 
 import com.contentful.java.cma.model.CMAEntry
+import io.yannick_cw.contenful.parser.CmaReader.ReadingError
 
 object MetaInfo {
   sealed trait Status
@@ -34,7 +35,7 @@ object MetaInfo {
               val date: String = x
             }
         )
-        .toRight("Did not find a creation time")
+        .toRight(ReadingError("Did not find a creation time"))
   }
 
   trait UpdatedAt { val date: String }
@@ -47,7 +48,7 @@ object MetaInfo {
               val date: String = x
             }
         )
-        .toRight("Did not find a updated time")
+        .toRight(ReadingError("Did not find a updated time"))
   }
 
   trait FirstPublishedAt { val date: String }
@@ -60,7 +61,7 @@ object MetaInfo {
               val date: String = x
             }
         )
-        .toRight("Did not find a first published time")
+        .toRight(ReadingError("Did not find a first published time"))
   }
 
   trait PublishedAt { val date: String }
@@ -73,6 +74,6 @@ object MetaInfo {
               val date: String = x
             }
         )
-        .toRight("Did not find a published time")
+        .toRight(ReadingError("Did not find a published time"))
   }
 }

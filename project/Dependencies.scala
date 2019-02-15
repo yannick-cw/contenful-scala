@@ -6,7 +6,7 @@ object Dependencies {
   val ShapelessVersion = "2.3.3"
   val ContenfulVersion = "3.2.4"
 
-  lazy val scalaTest = Seq(
+  lazy val test = Seq(
     "org.scalatest" %% "scalatest" % ScalaTestVersion % Test
   )
 
@@ -17,5 +17,5 @@ object Dependencies {
   lazy val contentfulSdk = Seq(
     "com.contentful.java" % "cma-sdk" % ContenfulVersion)
 
-  lazy val parserDependencies = scalaTest ++ shapeless ++ contentfulSdk
+  lazy val parserDependencies = test ++ shapeless ++ contentfulSdk
 }

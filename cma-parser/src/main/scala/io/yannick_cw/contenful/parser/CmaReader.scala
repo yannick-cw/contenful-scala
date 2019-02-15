@@ -18,8 +18,14 @@ object CmaReader {
     final override def fillInStackTrace(): Throwable = this
   }
 
-  final case class ReadingError(message: String) extends Error
-  final case class ParsingError(message: String) extends Error
+  final case class ReadingError(message: String) extends Error {
+    override def toString: String   = s"ReadingFailure: $message"
+    override def getMessage: String = message
+  }
+  final case class ParsingError(message: String) extends Error {
+    override def toString: String   = s"ParsingError: $message"
+    override def getMessage: String = message
+  }
 
   type Result[A] = Either[Error, A]
   def apply[A](implicit R: CmaReader[A]): CmaReader[A] = R

@@ -1,7 +1,11 @@
 package io.yannick_cw.contenful.parser
 
+import java.time.ZonedDateTime
+
 import com.contentful.java.cma.model.CMAEntry
-import io.yannick_cw.contenful.parser.CmaReader.ReadingError
+import io.yannick_cw.contenful.parser.CmaReader.{ParsingError, ReadingError}
+
+import scala.util.Try
 
 object MetaInfo {
   sealed trait Status
@@ -25,55 +29,93 @@ object MetaInfo {
       else Right(Draft)
   }
 
-  trait CreatedAt { val date: String }
+  trait Coordinates {
+    override def toString: String = s"Coordinates { lon: $lon, lat: $lat }"
+    val lon: Double
+    val lat: Double
+  }
+
+  private def parseTime[A](
+      time: Option[String],
+      name: String,
+      createA: ZonedDateTime => A
+  ) =
+    time
+      .toRight(ReadingError(s"Did not find a time for $name"): CmaReader.Error)
+      .flatMap(
+        stringTime =>
+          Try(ZonedDateTime.parse(stringTime)).toEither
+            .map(createA)
+            .left
+            .map(
+              err =>
+                ParsingError(
+                  s"Could not parse time for $name: $stringTime with $err"
+                )
+            )
+      )
+
+  trait CreatedAt {
+    val date: ZonedDateTime
+    override def toString: String = date.toString
+  }
   object CreatedAt {
     implicit val createdReader: CmaReader[CreatedAt] = (cma: CmaCursor) =>
-      Option(cma.entry.getSystem.getCreatedAt)
-        .map(
-          x =>
-            new CreatedAt {
-              val date: String = x
-            }
-        )
-        .toRight(ReadingError("Did not find a creation time"))
+      parseTime(
+        Option(cma.entry.getSystem.getCreatedAt),
+        "CreatedAt",
+        time =>
+          new CreatedAt {
+            val date: ZonedDateTime = time
+          }
+      )
   }
 
-  trait UpdatedAt { val date: String }
+  trait UpdatedAt {
+    val date: ZonedDateTime
+    override def toString: String = date.toString
+  }
   object UpdatedAt {
     implicit val reader: CmaReader[UpdatedAt] = (cma: CmaCursor) =>
-      Option(cma.entry.getSystem.getUpdatedAt)
-        .map(
-          x =>
-            new UpdatedAt {
-              val date: String = x
-            }
-        )
-        .toRight(ReadingError("Did not find a updated time"))
+      parseTime(
+        Option(cma.entry.getSystem.getUpdatedAt),
+        "UpdateAt",
+        time =>
+          new UpdatedAt {
+            val date: ZonedDateTime = time
+          }
+      )
   }
 
-  trait FirstPublishedAt { val date: String }
+  trait FirstPublishedAt {
+    val date: ZonedDateTime
+    override def toString: String = date.toString
+  }
   object FirstPublishedAt {
     implicit val reader: CmaReader[FirstPublishedAt] = (cma: CmaCursor) =>
-      Option(cma.entry.getSystem.getFirstPublishedAt)
-        .map(
-          x =>
-            new FirstPublishedAt {
-              val date: String = x
-            }
-        )
-        .toRight(ReadingError("Did not find a first published time"))
+      parseTime(
+        Option(cma.entry.getSystem.getFirstPublishedAt),
+        "FirstPublishedAt",
+        time =>
+          new FirstPublishedAt {
+            val date: ZonedDateTime = time
+          }
+      )
   }
 
-  trait PublishedAt { val date: String }
+  trait PublishedAt {
+    val date: ZonedDateTime
+    override def toString: String = date.toString
+  }
   object PublishedAt {
     implicit val reader: CmaReader[PublishedAt] = (cma: CmaCursor) =>
-      Option(cma.entry.getSystem.getPublishedAt)
-        .map(
-          x =>
-            new PublishedAt {
-              val date: String = x
-            }
-        )
-        .toRight(ReadingError("Did not find a published time"))
+      parseTime(
+        Option(cma.entry.getSystem.getPublishedAt),
+        "PublishedAt",
+        time =>
+          new PublishedAt {
+            val date: ZonedDateTime = time
+          }
+      )
   }
 }

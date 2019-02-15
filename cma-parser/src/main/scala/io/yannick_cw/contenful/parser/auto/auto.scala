@@ -1,5 +1,7 @@
 package io.yannick_cw.contenful.parser
 
+import java.time.ZonedDateTime
+
 import com.contentful.java.cma.model.{CMALink, CMAType}
 import com.google.gson.internal.LinkedTreeMap
 import io.yannick_cw.contenful.parser.CmaReader.{
@@ -7,11 +9,13 @@ import io.yannick_cw.contenful.parser.CmaReader.{
   ReadingError,
   Result
 }
+import io.yannick_cw.contenful.parser.MetaInfo.Coordinates
 import shapeless.labelled.{FieldType, field}
 import shapeless.{CNil, HList, HNil, LabelledGeneric, Lazy, Witness, :: => #:}
 
 import scala.collection.JavaConverters._
 import scala.reflect.ClassTag
+import scala.util.Try
 
 package object auto {
 
@@ -38,11 +42,48 @@ package object auto {
         }
       } yield typedValue
 
-  implicit val intReader: CmaReader[Int]       = baseTypeReader
   implicit val boolReader: CmaReader[Boolean]  = baseTypeReader
   implicit val doubleReader: CmaReader[Double] = baseTypeReader
+  implicit val intReader: CmaReader[Int]       = doubleReader.map(_.toInt)
   implicit val stringReader: CmaReader[String] = baseTypeReader
+  implicit val dateTimeReader: CmaReader[ZonedDateTime] =
+    stringReader.emap(
+      time =>
+        Try(ZonedDateTime.parse(time)).toEither.left.map(
+          err => ParsingError(s"Failed parsing time from $time with: $err")
+      )
+    )
 
+  implicit val coordinatesReader: CmaReader[Coordinates] =
+    baseTypeReader[LinkedTreeMap[String, Double]].emap(
+      coordsMap =>
+        for {
+          longitude <- coordsMap.asScala
+            .get("lon")
+            .toRight(
+              ParsingError(
+                s"Did not find 'lon' field on Coordinates $coordsMap"
+              )
+            )
+          lattitude <- coordsMap.asScala
+            .get("lat")
+            .toRight(
+              ParsingError(
+                s"Did not find 'lat' field on Coordinates $coordsMap"
+              )
+            )
+        } yield
+          new Coordinates {
+            val lon: Double = longitude
+            val lat: Double = lattitude
+        }
+    )
+
+  private def toLinkType(_type: String): Result[CMAType] = _type match {
+    case "Entry" => Right(CMAType.Entry)
+    case "Asset" => Right(CMAType.Asset)
+    case other   => Left(ParsingError(s"Link type $other is not supported"))
+  }
   private def parseCmaLink(
       link: LinkedTreeMap[String, LinkedTreeMap[String, String]]
   ) =
@@ -54,13 +95,7 @@ package object auto {
       linkType <- scalaMap
         .get("linkType")
         .toRight(ReadingError(s"Did not find link type on CMALink $link"))
-      entry <- if (linkType == "Entry") Right(CMAType.Entry)
-      else
-        Left(
-          ReadingError(
-            s"Only Entry as CMALink linktype is currently supported, but was $linkType"
-          )
-        )
+      entry <- toLinkType(linkType)
       id <- scalaMap
         .get("id")
         .toRight(ReadingError(s"Did not find id on CMALink $link"))
@@ -94,7 +129,7 @@ package object auto {
           }
           .foldLeft(Right(List.empty): Result[List[A]])(
             (acc, res) => acc.flatMap(l => res.map(l :+ _))
-          )
+        )
     )
 
   implicit val intListReader: CmaReader[List[Int]]       = listReader[Int]
@@ -123,8 +158,8 @@ package object auto {
             err =>
               ReadingError(
                 s"Failed for field name ${witness.value.name}: " + err
-              )
-          )
+            )
+        )
     )
 
   implicit val hnilDecoder: CmaReader[HNil] = _ => Right(HNil)
